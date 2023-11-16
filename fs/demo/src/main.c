@@ -7,7 +7,7 @@
 #include <linux/fs.h>
 #include <pwd.h>
 
-#define DEMO_DEFAULT_PERM        0777
+#define DEMO_DEFAULT_PERM       0777
 
 
 /* 超级块 */
@@ -41,9 +41,16 @@ static int demo_mount(){
 
 
     /* 填充super信息 */
-    super.sz_io = /* TODO */;
-    super.sz_disk = /* TODO */;
-    super.sz_blks = /* TODO */; 
+    //super.sz_io = /* TODO */;
+    //super.sz_disk = /* TODO */;
+    //super.sz_blks = /* TODO */; 
+    //step 1，完成一个简单的全局超级块填充，维护一些后续计算需要的信息。
+    //同学们可以通过ddriver_ioctl来获取磁盘容量和IO块大小等信息，从而得出逻辑块大小
+    ddriver_ioctl(super.driver_fd, IOC_REQ_DEVICE_IO_SZ,  &super.sz_io);
+    ddriver_ioctl(super.driver_fd, IOC_REQ_DEVICE_SIZE, &super.sz_disk);
+
+    //文件系统demo的 一个逻辑块是两个IO块大小
+    super.sz_blks = 2*super.sz_io;
 
     return 0;
 }
@@ -64,15 +71,22 @@ static int demo_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off
     /* 根据超级块的信息，从第500逻辑块读取一个dentry，ls将只固定显示这个文件名 */
 
     /* TODO: 计算磁盘偏移off，并根据磁盘偏移off调用ddriver_seek移动磁盘头到磁盘偏移off处 */
+    int off = 500 * super.sz_blks;
+    ddriver_seek(super.driver_fd, off, SEEK_SET);
 
     /* TODO: 调用ddriver_read读出一个磁盘块到内存，512B */
+    char buf2[512];
+    ddriver_read(super.driver_fd, buf2, 512);
 
     /* TODO: 使用memcpy拷贝上述512B的前sizeof(demo_dentry)字节构建一个demo_dentry结构 */
+    struct demo_dentry dentry;
+    memcpy(&dentry, buf2, sizeof(dentry));
 
     /* TODO: 填充filename */
+    strcpy(filename, dentry.fname);
 
     // 此处大家先不关注filler，已经帮同学写好，同学填充好filename即可
-    return filler(buf, filename, NULL, 0);
+    return filler(buf, dentry.fname, NULL, 0);
 }
 
 /* 显示文件属性 */
@@ -81,7 +95,7 @@ static int demo_getattr(const char* path, struct stat *stbuf)
     if(strcmp(path, "/") == 0)
         stbuf->st_mode = DEMO_DEFAULT_PERM | S_IFDIR;            // 根目录是目录文件
     else
-        stbuf->st_mode = /* TODO: 显示为普通文件 */;            // 该文件显示为普通文件
+        stbuf->st_mode = DEMO_DEFAULT_PERM | S_IFREG;            // 该文件显示为普通文件
     return 0;
 }
 
